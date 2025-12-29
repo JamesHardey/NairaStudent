@@ -10,7 +10,7 @@ import {
 } from "react-native";
 import { StatusBar } from "expo-status-bar";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { ArrowLeft, ChevronDown } from "lucide-react-native";
+import { ArrowLeft, ChevronDown, Plus, CircleDollarSign, Sparkles, X } from "lucide-react-native";
 import { useRouter } from "expo-router";
 import {
   useFonts,
@@ -18,8 +18,9 @@ import {
   InstrumentSans_500Medium,
   InstrumentSans_600SemiBold,
 } from "@expo-google-fonts/instrument-sans";
-import { saveExpense, getDailyLimit, getExpenses } from "../utils/storage";
-import { CATEGORIES } from "../constants/categories";
+import { saveExpense, getDailyLimit, getExpenses, getCategories, saveCategory, getAISettings } from "../utils/storage";
+import { processExpenseText } from "../utils/ai";
+import { DEFAULT_CATEGORIES } from "../constants/categories";
 import { formatNaira, calculateRemainingBalance, calculateDailyTotal } from "../utils/calculations";
 import CustomKeypad from "../components/CustomKeypad";
 import { triggerLight, triggerSuccess, triggerError, triggerSelection } from "../utils/haptics";
@@ -34,9 +35,18 @@ export default function AddExpense() {
 
   const [amount, setAmount] = useState("0");
   const [note, setNote] = useState("");
-  const [selectedCategory, setSelectedCategory] = useState(CATEGORIES[0]);
+  const [categories, setCategories] = useState(DEFAULT_CATEGORIES);
+  const [selectedCategory, setSelectedCategory] = useState(DEFAULT_CATEGORIES[0]);
   const [showCategoryPicker, setShowCategoryPicker] = useState(false);
+  const [isCreatingCategory, setIsCreatingCategory] = useState(false);
+  const [newCategoryName, setNewCategoryName] = useState("");
   const [remainingBalance, setRemainingBalance] = useState(0);
+
+  // AI State
+  const [aiEnabled, setAiEnabled] = useState(false);
+  const [showSmartEntry, setShowSmartEntry] = useState(false);
+  const [smartText, setSmartText] = useState("");
+  const [isProcessingAI, setIsProcessingAI] = useState(false);
 
   const [fontsLoaded] = useFonts({
     InstrumentSans_400Regular,
@@ -45,8 +55,21 @@ export default function AddExpense() {
   });
 
   React.useEffect(() => {
-    loadBalance();
+    loadData();
   }, []);
+
+  const loadData = async () => {
+    await loadBalance();
+    const loadedCats = await getCategories();
+    const aiSettings = await getAISettings();
+    setAiEnabled(aiSettings.enabled && !!aiSettings.apiKey);
+    
+    if (loadedCats && loadedCats.length > 0) {
+      setCategories(loadedCats);
+      // Ensure selected category is valid or revert to first
+      setSelectedCategory(prev => loadedCats.find(c => c.id === prev.id) || loadedCats[0]);
+    }
+  };
 
   const loadBalance = async () => {
     const limit = await getDailyLimit();
@@ -110,6 +133,67 @@ export default function AddExpense() {
       } else {
         setAmount(amount + key);
       }
+    }
+  };
+
+  const handleCreateCategory = async () => {
+    if (!newCategoryName.trim()) {
+      triggerError();
+      Alert.alert("Error", "Please enter a category name");
+      return;
+    }
+
+    const newCat = {
+      id: `custom_${Date.now()}`,
+      name: newCategoryName.trim(),
+      iconName: "CircleDollarSign",
+      lightColor: "#E0E0E0",
+      darkColor: "#333333",
+    };
+
+    const success = await saveCategory(newCat);
+    if (success) {
+      triggerSuccess();
+      const newCatWithIcon = { ...newCat, icon: CircleDollarSign };
+      const updatedCats = [...categories, newCatWithIcon];
+      setCategories(updatedCats);
+      setSelectedCategory(newCatWithIcon);
+      setNewCategoryName("");
+      setIsCreatingCategory(false);
+      setShowCategoryPicker(false);
+    } else {
+      triggerError();
+      Alert.alert("Error", "Failed to create category");
+    }
+  };
+
+  const handleSmartEntry = async () => {
+    if (!smartText.trim()) return;
+    
+    setIsProcessingAI(true);
+    triggerSelection();
+    
+    // Call AI Service
+    const result = await processExpenseText(smartText);
+    
+    setIsProcessingAI(false);
+    
+    if (result) {
+        triggerSuccess();
+        setAmount(result.amount.toString());
+        setNote(result.note || smartText);
+        
+        // Find category by ID returned from AI (which matched by name)
+        const matchedCat = categories.find(c => c.id === result.categoryId);
+        if (matchedCat) {
+            setSelectedCategory(matchedCat);
+        }
+        
+        setShowSmartEntry(false);
+        setSmartText("");
+    } else {
+        triggerError();
+        Alert.alert("AI Error", "Could not understand the expense. Try being more specific.");
     }
   };
 
@@ -245,6 +329,92 @@ export default function AddExpense() {
             }}
           />
 
+          {/* AI Smart Entry Button */}
+          {aiEnabled && !showSmartEntry && (
+            <TouchableOpacity
+                onPress={() => {
+                    triggerSelection();
+                    setShowSmartEntry(true);
+                }}
+                style={{
+                    alignSelf: "center",
+                    backgroundColor: colors.primary, // Using colors object if available, else literal
+                    backgroundColor: isDark ? "#2A1A40" : "#F0E6FF",
+                    paddingVertical: 8,
+                    paddingHorizontal: 16,
+                    borderRadius: 20,
+                    marginBottom: 20,
+                    flexDirection: "row",
+                    alignItems: "center",
+                    gap: 8,
+                    borderWidth: 1,
+                    borderColor: isDark ? "#A78BFA" : "#7C3AED"
+                }}
+            >
+                <Sparkles size={16} color={isDark ? "#A78BFA" : "#7C3AED"} />
+                <Text style={{ 
+                    fontFamily: "InstrumentSans_600SemiBold", 
+                    color: isDark ? "#A78BFA" : "#7C3AED",
+                    fontSize: 14
+                }}>
+                    Smart Entry
+                </Text>
+            </TouchableOpacity>
+          )}
+
+          {/* Smart Entry Input Area */}
+          {showSmartEntry && (
+            <View style={{
+                marginBottom: 24,
+                backgroundColor: isDark ? "#2A1A40" : "#F5F3FF",
+                borderRadius: 20,
+                padding: 16,
+                borderWidth: 1,
+                borderColor: isDark ? "#A78BFA" : "#7C3AED"
+            }}>
+                <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+                    <Text style={{ fontFamily: "InstrumentSans_600SemiBold", color: isDark ? "#fff" : "#000" }}>
+                        Describe your expense
+                    </Text>
+                    <TouchableOpacity onPress={() => setShowSmartEntry(false)}>
+                        <X size={20} color={isDark ? "#aaa" : "#666"} />
+                    </TouchableOpacity>
+                </View>
+                
+                <TextInput
+                    style={{
+                        fontFamily: "InstrumentSans_400Regular",
+                        fontSize: 16,
+                        color: isDark ? "#fff" : "#000",
+                        marginBottom: 16,
+                        minHeight: 60
+                    }}
+                    placeholder="e.g. 'Rice and chicken 1500 at Mama Put'"
+                    placeholderTextColor={isDark ? "#888" : "#999"}
+                    multiline
+                    value={smartText}
+                    onChangeText={setSmartText}
+                    autoFocus
+                />
+                
+                <TouchableOpacity
+                    onPress={handleSmartEntry}
+                    disabled={isProcessingAI}
+                    style={{
+                        backgroundColor: isDark ? "#A78BFA" : "#7C3AED",
+                        borderRadius: 12,
+                        paddingVertical: 12,
+                        alignItems: "center",
+                        opacity: isProcessingAI ? 0.7 : 1
+                    }}
+                >
+                    <Text style={{ fontFamily: "InstrumentSans_600SemiBold", color: "#fff" }}>
+                        {isProcessingAI ? "Analyzing..." : "Auto-Fill details"}
+                    </Text>
+                </TouchableOpacity>
+            </View>
+          )}
+
           {/* Category Selector */}
           <TouchableOpacity
             style={{
@@ -281,9 +451,87 @@ export default function AddExpense() {
           {/* Category Picker */}
           {showCategoryPicker && (
             <View style={{ marginBottom: 24 }}>
-              {CATEGORIES.map((category) => (
+              {categories.map((category) => (
                 <CategoryButton key={category.id} category={category} />
               ))}
+              
+              {isCreatingCategory ? (
+                <View
+                  style={{
+                    backgroundColor: isDark ? "#2C2C2C" : "#F6F6F6",
+                    borderRadius: 24,
+                    padding: 12,
+                    marginTop: 8,
+                  }}
+                >
+                  <TextInput
+                    style={{
+                      fontFamily: "InstrumentSans_400Regular",
+                      fontSize: 16,
+                      color: isDark ? "#FFFFFF" : "#000",
+                      marginBottom: 12,
+                      padding: 8,
+                      borderBottomWidth: 1,
+                      borderBottomColor: isDark ? "#444" : "#ddd",
+                    }}
+                    placeholder="Category Name"
+                    placeholderTextColor={isDark ? "#888" : "#999"}
+                    value={newCategoryName}
+                    onChangeText={setNewCategoryName}
+                    autoFocus
+                  />
+                  <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
+                    <TouchableOpacity
+                      onPress={() => setIsCreatingCategory(false)}
+                      style={{ padding: 8 }}
+                    >
+                      <Text style={{ color: isDark ? "#888" : "#666", fontFamily: "InstrumentSans_500Medium" }}>Cancel</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      onPress={handleCreateCategory}
+                      style={{ 
+                        padding: 8, 
+                        backgroundColor: isDark ? "#FFF" : "#000",
+                        borderRadius: 16,
+                        paddingHorizontal: 16
+                      }}
+                    >
+                      <Text style={{ color: isDark ? "#000" : "#FFF", fontFamily: "InstrumentSans_500Medium" }}>Save</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              ) : (
+                <TouchableOpacity
+                  style={{
+                    height: 48,
+                    backgroundColor: isDark ? "#2C2C2C" : "#FFFFFF",
+                    borderRadius: 24,
+                    flexDirection: "row",
+                    alignItems: "center",
+                    paddingHorizontal: 16,
+                    marginBottom: 12,
+                    borderWidth: 1,
+                    borderColor: isDark ? "#444" : "#E0E0E0",
+                    borderStyle: "dashed",
+                  }}
+                  onPress={() => {
+                    triggerSelection();
+                    setIsCreatingCategory(true);
+                  }}
+                >
+                  <Plus size={20} color={isDark ? "#888888" : "#666666"} />
+                  <Text
+                    style={{
+                      fontFamily: "InstrumentSans_500Medium",
+                      fontSize: 14,
+                      color: isDark ? "#888888" : "#666666",
+                      marginLeft: 8,
+                    }}
+                  >
+                    Add new category
+                  </Text>
+                </TouchableOpacity>
+              )}
             </View>
           )}
 

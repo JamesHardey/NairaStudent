@@ -19,7 +19,6 @@ import {
 import { useFocusEffect } from "expo-router";
 import { useFonts, Poppins_600SemiBold } from "@expo-google-fonts/poppins";
 import { Roboto_400Regular } from "@expo-google-fonts/roboto";
-import { getExpenses } from "../../utils/storage";
 import {
   formatNaira,
   calculateWeeklyTotal,
@@ -30,7 +29,8 @@ import {
   getTopCategories,
   getSpendingTrend,
 } from "../../utils/calculations";
-import { getCategoryById } from "../../constants/categories";
+import { DEFAULT_CATEGORIES } from "../../constants/categories";
+import { getExpenses, getCategories } from "../../utils/storage";
 
 const { width: screenWidth } = Dimensions.get("window");
 
@@ -40,6 +40,7 @@ export default function History() {
   const isDark = colorScheme === "dark";
 
   const [expenses, setExpenses] = useState([]);
+  const [categories, setCategories] = useState(DEFAULT_CATEGORIES);
   const [refreshing, setRefreshing] = useState(false);
   const [selectedPeriod, setSelectedPeriod] = useState("week"); // 'week' or 'month'
 
@@ -50,7 +51,9 @@ export default function History() {
 
   const loadData = async () => {
     const expenseData = await getExpenses();
+    const cats = await getCategories();
     setExpenses(expenseData);
+    setCategories(cats);
   };
 
   useFocusEffect(
@@ -432,7 +435,7 @@ export default function History() {
             </View>
           ) : (
             topCategories.map((item, index) => {
-              const category = getCategoryById(item.category);
+              const category = categories.find(c => c.id === item.category) || DEFAULT_CATEGORIES[4];
               const CategoryIcon = category.icon;
               const totalAmount =
                 selectedPeriod === "week" ? weeklyTotal : monthlyTotal;

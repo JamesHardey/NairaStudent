@@ -3,6 +3,25 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 const STORAGE_KEYS = {
   DAILY_LIMIT: "@naira_student_daily_limit",
   EXPENSES: "@naira_student_expenses",
+  CATEGORIES: "@naira_student_categories",
+  AI_SETTINGS: "@naira_student_ai_settings",
+};
+
+import { DEFAULT_CATEGORIES } from "../constants/categories";
+import { Utensils, Car, Wifi, Printer, MoreHorizontal, ShoppingBag, Book, Coffee, Gift, Music, CircleDollarSign } from "lucide-react-native";
+
+const ICON_MAP = {
+  Utensils,
+  Car,
+  Wifi,
+  Printer,
+  MoreHorizontal,
+  ShoppingBag,
+  Book,
+  Coffee,
+  Gift,
+  Music,
+  CircleDollarSign
 };
 
 // Budget Management
@@ -105,5 +124,75 @@ export const updateExpense = async (expenseId, updatedData) => {
   } catch (error) {
     console.error("Error updating expense:", error);
     return false;
+  }
+};
+
+// Category Management
+export const getCategories = async () => {
+  try {
+    const savedCategoriesJson = await AsyncStorage.getItem(STORAGE_KEYS.CATEGORIES);
+    const savedCategories = savedCategoriesJson ? JSON.parse(savedCategoriesJson) : [];
+    
+    // Hydrate icons for saved categories
+    const hydratedSavedCategories = savedCategories.map(cat => ({
+      ...cat,
+      icon: ICON_MAP[cat.iconName] || CircleDollarSign, // Default icon
+    }));
+
+    // Return combined categories (Defaults + Custom)
+    return [...DEFAULT_CATEGORIES, ...hydratedSavedCategories];
+  } catch (error) {
+    console.error("Error getting categories:", error);
+    return DEFAULT_CATEGORIES;
+  }
+};
+
+export const saveCategory = async (category) => {
+  try {
+    const savedCategoriesJson = await AsyncStorage.getItem(STORAGE_KEYS.CATEGORIES);
+    const savedCategories = savedCategoriesJson ? JSON.parse(savedCategoriesJson) : [];
+    
+    // We only save the serializable parts (no icon component)
+    const newCategoryToSave = {
+      id: category.id,
+      name: category.name,
+      iconName: category.iconName || 'CircleDollarSign',
+      lightColor: category.lightColor,
+      darkColor: category.darkColor,
+    };
+
+    const updatedCategories = [...savedCategories, newCategoryToSave];
+    
+    await AsyncStorage.setItem(
+      STORAGE_KEYS.CATEGORIES,
+      JSON.stringify(updatedCategories)
+    );
+    return true;
+  } catch (error) {
+    console.error("Error saving category:", error);
+    return false;
+  }
+};
+
+// AI Settings Management
+export const saveAISettings = async (settings) => {
+  try {
+    const current = await getAISettings();
+    const newSettings = { ...current, ...settings };
+    await AsyncStorage.setItem(STORAGE_KEYS.AI_SETTINGS, JSON.stringify(newSettings));
+    return true;
+  } catch (error) {
+    console.error("Error saving AI settings:", error);
+    return false;
+  }
+};
+
+export const getAISettings = async () => {
+  try {
+    const settings = await AsyncStorage.getItem(STORAGE_KEYS.AI_SETTINGS);
+    return settings ? JSON.parse(settings) : { enabled: false, apiKey: "" };
+  } catch (error) {
+    console.error("Error getting AI settings:", error);
+    return { enabled: false, apiKey: "" };
   }
 };

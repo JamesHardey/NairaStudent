@@ -18,8 +18,8 @@ import {
   InstrumentSans_500Medium,
   InstrumentSans_600SemiBold,
 } from "@expo-google-fonts/instrument-sans";
-import { updateExpense, getDailyLimit, getExpenses } from "../utils/storage";
-import { CATEGORIES } from "../constants/categories";
+import { updateExpense, getDailyLimit, getExpenses, getCategories } from "../utils/storage";
+import { DEFAULT_CATEGORIES } from "../constants/categories";
 import { formatNaira, calculateRemainingBalance } from "../utils/calculations";
 import CustomKeypad from "../components/CustomKeypad";
 
@@ -32,7 +32,8 @@ export default function EditExpense() {
 
   const [amount, setAmount] = useState("0");
   const [note, setNote] = useState("");
-  const [selectedCategory, setSelectedCategory] = useState(CATEGORIES[0]);
+  const [categories, setCategories] = useState(DEFAULT_CATEGORIES);
+  const [selectedCategory, setSelectedCategory] = useState(DEFAULT_CATEGORIES[0]);
   const [showCategoryPicker, setShowCategoryPicker] = useState(false);
   const [remainingBalance, setRemainingBalance] = useState(0);
 
@@ -43,18 +44,25 @@ export default function EditExpense() {
   });
 
   useEffect(() => {
-    loadExpenseData();
-    loadBalance();
+    loadData();
   }, []);
 
-  const loadExpenseData = async () => {
+  const loadData = async () => {
+    // Load categories first
+    const cats = await getCategories();
+    setCategories(cats);
+    
+    // Load budgets
+    loadBalance();
+
+    // Load expense data
     if (params.id) {
       const expenses = await getExpenses();
       const expense = expenses.find((exp) => exp.id === params.id);
       if (expense) {
         setAmount(expense.amount.toString());
         setNote(expense.note || "");
-        const category = CATEGORIES.find((cat) => cat.id === expense.category);
+        const category = cats.find((cat) => cat.id === expense.category);
         if (category) setSelectedCategory(category);
       }
     }
@@ -289,7 +297,7 @@ export default function EditExpense() {
               marginBottom: 24,
             }}
           >
-            {CATEGORIES.map((category) => (
+            {categories.map((category) => (
               <View key={category.id} style={{ width: "48%" }}>
                 <CategoryButton category={category} />
               </View>

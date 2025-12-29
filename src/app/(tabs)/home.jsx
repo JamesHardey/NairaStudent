@@ -17,7 +17,6 @@ import {
   Poppins_500Medium,
 } from "@expo-google-fonts/poppins";
 import { Roboto_400Regular } from "@expo-google-fonts/roboto";
-import { getDailyLimit, getExpenses } from "../../utils/storage";
 import {
   formatNaira,
   calculateDailyTotal,
@@ -26,7 +25,8 @@ import {
   getStatusColor,
   isToday,
 } from "../../utils/calculations";
-import { getCategoryById, getCategoryColor } from "../../constants/categories";
+import { DEFAULT_CATEGORIES } from "../../constants/categories";
+import { getDailyLimit, getExpenses, getCategories } from "../../utils/storage";
 
 export default function Home() {
   const insets = useSafeAreaInsets();
@@ -36,6 +36,7 @@ export default function Home() {
 
   const [dailyLimit, setDailyLimit] = useState(5000);
   const [expenses, setExpenses] = useState([]);
+  const [categories, setCategories] = useState(DEFAULT_CATEGORIES);
   const [refreshing, setRefreshing] = useState(false);
 
   const [fontsLoaded] = useFonts({
@@ -47,8 +48,10 @@ export default function Home() {
   const loadData = async () => {
     const limit = await getDailyLimit();
     const expenseData = await getExpenses();
+    const cats = await getCategories();
     setDailyLimit(limit);
     setExpenses(expenseData);
+    setCategories(cats);
   };
 
   useFocusEffect(
@@ -353,8 +356,9 @@ export default function Home() {
             </View>
           ) : (
             todayExpenses.slice(0, 5).map((expense) => {
-              const category = getCategoryById(expense.category);
+              const category = categories.find(c => c.id === expense.category) || DEFAULT_CATEGORIES[4];
               const CategoryIcon = category.icon;
+              const categoryColor = isDark ? category.darkColor : category.lightColor;
 
               return (
                 <TouchableOpacity
@@ -374,10 +378,7 @@ export default function Home() {
                     style={{
                       width: 48,
                       height: 48,
-                      backgroundColor: getCategoryColor(
-                        expense.category,
-                        isDark,
-                      ),
+                      backgroundColor: categoryColor,
                       borderRadius: 24,
                       alignItems: "center",
                       justifyContent: "center",

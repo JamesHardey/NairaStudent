@@ -13,13 +13,14 @@ import { PieChart } from "lucide-react-native";
 import { useFocusEffect } from "expo-router";
 import { useFonts, Poppins_600SemiBold } from "@expo-google-fonts/poppins";
 import { Roboto_400Regular } from "@expo-google-fonts/roboto";
-import { getExpenses } from "../../utils/storage";
+// import { getExpenses } from "../../utils/storage";
 import {
   formatNaira,
   calculateCategoryBreakdown,
   calculateDailyTotal,
 } from "../../utils/calculations";
-import { getCategoryById, getCategoryColor } from "../../constants/categories";
+import { DEFAULT_CATEGORIES } from "../../constants/categories";
+import { getExpenses, getCategories } from "../../utils/storage";
 
 const { width: screenWidth } = Dimensions.get("window");
 
@@ -29,6 +30,7 @@ export default function Analytics() {
   const isDark = colorScheme === "dark";
 
   const [expenses, setExpenses] = useState([]);
+  const [categories, setCategories] = useState(DEFAULT_CATEGORIES);
   const [refreshing, setRefreshing] = useState(false);
 
   const [fontsLoaded] = useFonts({
@@ -38,7 +40,9 @@ export default function Analytics() {
 
   const loadData = async () => {
     const expenseData = await getExpenses();
+    const cats = await getCategories();
     setExpenses(expenseData);
+    setCategories(cats);
   };
 
   useFocusEffect(
@@ -216,8 +220,9 @@ export default function Analytics() {
             </View>
           ) : (
             categoryBreakdown.map((item, index) => {
-              const category = getCategoryById(item.category);
+              const category = categories.find(c => c.id === item.category) || DEFAULT_CATEGORIES[4];
               const CategoryIcon = category.icon;
+              const categoryColor = isDark ? category.darkColor : category.lightColor;
 
               return (
                 <View
@@ -235,7 +240,7 @@ export default function Analytics() {
                     style={{
                       width: 48,
                       height: 48,
-                      backgroundColor: getCategoryColor(item.category, isDark),
+                      backgroundColor: categoryColor,
                       borderRadius: 24,
                       alignItems: "center",
                       justifyContent: "center",

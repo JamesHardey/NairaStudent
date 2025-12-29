@@ -7,7 +7,7 @@ import {
 } from "lucide-react-native";
 
 // Nigerian student-specific expense categories
-export const CATEGORIES = [
+export const DEFAULT_CATEGORIES = [
   {
     id: "food",
     name: "Food (Mama Put)",
@@ -44,6 +44,8 @@ export const CATEGORIES = [
     darkColor: "#4A2C2A",
   },
 ];
+
+export const CATEGORIES = DEFAULT_CATEGORIES;
 
 export const getCategoryById = (id) => {
   return CATEGORIES.find((cat) => cat.id === id) || CATEGORIES[4]; // Default to Miscellaneous

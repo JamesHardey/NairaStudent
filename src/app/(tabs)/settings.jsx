@@ -8,6 +8,8 @@ import {
   useColorScheme,
   Alert,
   RefreshControl,
+  Switch,
+  Linking,
 } from "react-native";
 import { StatusBar } from "expo-status-bar";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -16,6 +18,8 @@ import {
   Trash2,
   DollarSign,
   Save,
+  Brain,
+  ExternalLink,
 } from "lucide-react-native";
 import { useFocusEffect } from "expo-router";
 import { useFonts, Poppins_600SemiBold } from "@expo-google-fonts/poppins";
@@ -25,6 +29,8 @@ import {
   saveDailyLimit,
   clearAllExpenses,
   getExpenses,
+  getAISettings,
+  saveAISettings,
 } from "../../utils/storage";
 import { formatNaira } from "../../utils/calculations";
 import { triggerSuccess, triggerError, triggerMedium } from "../../utils/haptics";
@@ -39,6 +45,12 @@ export default function Settings() {
   const [expenseCount, setExpenseCount] = useState(0);
   const [refreshing, setRefreshing] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
+  
+  // AI Settings State
+  const [aiEnabled, setAiEnabled] = useState(false);
+  const [apiKey, setApiKey] = useState("");
+  const [tempApiKey, setTempApiKey] = useState("");
+  const [isEditingKey, setIsEditingKey] = useState(false);
 
   const [fontsLoaded] = useFonts({
     Poppins_600SemiBold,
@@ -48,9 +60,14 @@ export default function Settings() {
   const loadData = async () => {
     const limit = await getDailyLimit();
     const expenses = await getExpenses();
+    const aiSettings = await getAISettings();
+    
     setDailyLimit(limit.toString());
     setTempLimit(limit.toString());
     setExpenseCount(expenses.length);
+    setAiEnabled(aiSettings.enabled);
+    setApiKey(aiSettings.apiKey || "");
+    setTempApiKey(aiSettings.apiKey || "");
   };
 
   useFocusEffect(
@@ -113,6 +130,43 @@ export default function Settings() {
         },
       ],
     );
+  };
+
+  const handleToggleAI = async (value) => {
+    // If enabling, check if key is present or tell them to add one
+    if (value && !apiKey) {
+      Alert.alert("API Key Required", "Please enter your Gemini API Key first to enable AI features.");
+      setIsEditingKey(true);
+      return;
+    }
+    
+    setAiEnabled(value);
+    const success = await saveAISettings({ enabled: value, apiKey });
+    if (success) {
+        triggerMedium();
+    } else {
+        setAiEnabled(!value); // Revert on failure
+        Alert.alert("Error", "Failed to save setting");
+    }
+  };
+
+  const handleSaveApiKey = async () => {
+    if (!tempApiKey.trim()) {
+        Alert.alert("Error", "API Key cannot be empty");
+        return;
+    }
+    
+    const success = await saveAISettings({ enabled: true, apiKey: tempApiKey.trim() });
+    if (success) {
+        triggerSuccess();
+        setApiKey(tempApiKey.trim());
+        setAiEnabled(true);
+        setIsEditingKey(false);
+        Alert.alert("Success", "AI features enabled! You can now use Smart Entry.");
+    } else {
+        triggerError();
+        Alert.alert("Error", "Failed to save API Key");
+    }
   };
 
   const colors = {
@@ -338,6 +392,125 @@ export default function Settings() {
                 Tap to edit
               </Text>
             </TouchableOpacity>
+          )}
+        </View>
+
+        {/* AI Features Card */}
+        <View
+          style={{
+            backgroundColor: colors.card,
+            borderRadius: 24,
+            padding: 24,
+            marginBottom: 24,
+            borderWidth: 1,
+            borderColor: aiEnabled ? colors.accent : "transparent",
+          }}
+        >
+          <View
+            style={{
+              flexDirection: "row",
+              alignItems: "center",
+              marginBottom: 20,
+            }}
+          >
+            <View
+              style={{
+                width: 48,
+                height: 48,
+                backgroundColor: isDark ? "#2A1A40" : "#F0E6FF",
+                borderRadius: 24,
+                alignItems: "center",
+                justifyContent: "center",
+                marginRight: 16,
+              }}
+            >
+              <Brain size={24} color={isDark ? "#A78BFA" : "#7C3AED"} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text
+                style={{
+                  fontFamily: "Poppins_600SemiBold",
+                  fontSize: 18,
+                  color: colors.primary,
+                  marginBottom: 4,
+                }}
+              >
+                AI Features
+              </Text>
+              <Text
+                style={{
+                  fontFamily: "Roboto_400Regular",
+                  fontSize: 14,
+                  color: colors.secondary,
+                }}
+              >
+                Smart Entry & Receipt Scan
+              </Text>
+            </View>
+            <Switch 
+                value={aiEnabled}
+                onValueChange={handleToggleAI}
+                trackColor={{ false: isDark ? "#444" : "#ddd", true: colors.accent }}
+                thumbColor={"#fff"}
+            />
+          </View>
+
+          {/* API Key Section */}
+          {(aiEnabled || isEditingKey) && (
+            <View>
+                <Text style={{
+                    fontFamily: "Roboto_400Regular",
+                    fontSize: 12,
+                    color: colors.secondary,
+                    marginBottom: 8
+                }}>
+                    Google Gemini API Key
+                </Text>
+                
+                <View style={{ flexDirection: "row", gap: 8, marginBottom: 12 }}>
+                    <TextInput 
+                        style={{
+                            flex: 1,
+                            backgroundColor: isDark ? "#1A1A1A" : "#FFFFFF",
+                            borderRadius: 12,
+                            padding: 12,
+                            fontFamily: "Roboto_400Regular",
+                            color: colors.primary,
+                            borderWidth: 1,
+                            borderColor: isDark ? "#444" : "#ddd"
+                        }}
+                        placeholder="Paste API Key here..."
+                        placeholderTextColor={colors.secondary}
+                        value={tempApiKey}
+                        onChangeText={setTempApiKey}
+                        secureTextEntry
+                    />
+                    {tempApiKey !== apiKey && (
+                        <TouchableOpacity
+                            onPress={handleSaveApiKey}
+                            style={{
+                                backgroundColor: colors.accent,
+                                borderRadius: 12,
+                                padding: 12,
+                                justifyContent: "center",
+                                alignItems: "center"
+                            }}
+                        >
+                            <Save size={20} color="#fff" />
+                        </TouchableOpacity>
+                    )}
+                </View>
+                
+                <TouchableOpacity 
+                    onPress={() => Linking.openURL("https://aistudio.google.com/app/apikey")}
+                    style={{ flexDirection: "row", alignItems: "center" }}
+                >
+                    <Text style={{ color: colors.accent, fontFamily: "Poppins_600SemiBold", fontSize: 12, marginRight: 4 }}>
+                        Get a free API Key
+                    </Text>
+                    <ExternalLink size={12} color={colors.accent} />
+                </TouchableOpacity>
+            </View>
           )}
         </View>
 

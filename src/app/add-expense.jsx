@@ -26,6 +26,11 @@ import CustomKeypad from "../components/CustomKeypad";
 import { triggerLight, triggerSuccess, triggerError, triggerSelection } from "../utils/haptics";
 import { checkBudgetThreshold } from "../utils/notifications";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import * as ImagePicker from 'expo-image-picker';
+import { Calendar } from "react-native-calendars";
+import { Modal } from "react-native";
+import { format } from "date-fns";
+import { processReceiptImage } from "../utils/ai";
 
 export default function AddExpense() {
   const insets = useSafeAreaInsets();
@@ -42,17 +47,29 @@ export default function AddExpense() {
   const [newCategoryName, setNewCategoryName] = useState("");
   const [remainingBalance, setRemainingBalance] = useState(0);
 
+  // Date State
+  const [date, setDate] = useState(new Date());
+  const [showDatePicker, setShowDatePicker] = useState(false);
+
   // AI State
   const [aiEnabled, setAiEnabled] = useState(false);
   const [showSmartEntry, setShowSmartEntry] = useState(false);
   const [smartText, setSmartText] = useState("");
   const [isProcessingAI, setIsProcessingAI] = useState(false);
 
+  // Helper for safe date
+  const getSafeDate = (d) => {
+    if (d instanceof Date && !isNaN(d)) return d;
+    return new Date();
+  };
+
   const [fontsLoaded] = useFonts({
     InstrumentSans_400Regular,
     InstrumentSans_500Medium,
     InstrumentSans_600SemiBold,
   });
+
+  // ... (useEffect and loadData remain the same)
 
   React.useEffect(() => {
     loadData();
@@ -66,7 +83,6 @@ export default function AddExpense() {
     
     if (loadedCats && loadedCats.length > 0) {
       setCategories(loadedCats);
-      // Ensure selected category is valid or revert to first
       setSelectedCategory(prev => loadedCats.find(c => c.id === prev.id) || loadedCats[0]);
     }
   };
@@ -103,14 +119,14 @@ export default function AddExpense() {
         amount: parseFloat(amount),
         category: selectedCategory.id,
         note: note.trim(),
-        date: new Date().toISOString(),
+        date: getSafeDate(date).toISOString(),
       };
 
       const saved = await saveExpense(expense);
       if (saved) {
         triggerSuccess();
         
-        // Check budget and send notifications
+        // ... notifications logic ...
         const limit = await getDailyLimit();
         const expenses = await getExpenses();
         const dailyTotal = calculateDailyTotal(expenses);
@@ -124,9 +140,11 @@ export default function AddExpense() {
         Alert.alert("Error", "Failed to save expense");
       }
     } else if (key === "calendar") {
-      console.log("Calendar pressed");
+      setShowDatePicker(true);
     } else if (key === "₦") {
-      console.log("Currency pressed");
+      if (amount !== "0") {
+        setAmount(amount + "000");
+      }
     } else {
       if (amount === "0") {
         setAmount(key);
@@ -136,6 +154,7 @@ export default function AddExpense() {
     }
   };
 
+  // ... (handleCreateCategory, CategoryButton remain the same)
   const handleCreateCategory = async () => {
     if (!newCategoryName.trim()) {
       triggerError();
@@ -173,7 +192,6 @@ export default function AddExpense() {
     setIsProcessingAI(true);
     triggerSelection();
     
-    // Call AI Service
     const result = await processExpenseText(smartText);
     
     setIsProcessingAI(false);
@@ -183,17 +201,58 @@ export default function AddExpense() {
         setAmount(result.amount.toString());
         setNote(result.note || smartText);
         
-        // Find category by ID returned from AI (which matched by name)
         const matchedCat = categories.find(c => c.id === result.categoryId);
         if (matchedCat) {
             setSelectedCategory(matchedCat);
+        }
+        if (result.date) {
+             const now = new Date();
+             if (result.date.toLowerCase().includes("yesterday")) {
+                 now.setDate(now.getDate() - 1);
+                 setDate(now);
+             } else {
+                 setDate(now);
+             }
         }
         
         setShowSmartEntry(false);
         setSmartText("");
     } else {
         triggerError();
-        Alert.alert("AI Error", "Could not understand the expense. Try being more specific.");
+        Alert.alert("AI Error", "Could not understand the expense.");
+    }
+  };
+
+  const pickImage = async () => {
+    triggerSelection();
+    try {
+        const result = await ImagePicker.launchImageLibraryAsync({
+            mediaTypes: ImagePicker.MediaTypeOptions.Images,
+            allowsEditing: true,
+            base64: true,
+            quality: 0.5,
+        });
+
+        if (!result.canceled && result.assets[0].base64) {
+             setIsProcessingAI(true);
+             const aiResult = await processReceiptImage(result.assets[0].base64);
+             setIsProcessingAI(false);
+
+             if (aiResult) {
+                 triggerSuccess();
+                 setAmount(aiResult.amount.toString());
+                 setNote(aiResult.note || "Receipt Scan");
+                 const matchedCat = categories.find(c => c.id === aiResult.categoryId);
+                 if (matchedCat) setSelectedCategory(matchedCat);
+                 Alert.alert("Smart Scan", "Receipt details loaded!");
+             } else {
+                 triggerError();
+                 Alert.alert("Scan Error", "Could not read receipt.");
+             }
+        }
+    } catch (e) {
+        setIsProcessingAI(false);
+        Alert.alert("Error", "Failed to pick image");
     }
   };
 
@@ -250,10 +309,69 @@ export default function AddExpense() {
   const darkTopBarColor = isDark ? "#2C2C2C" : "#353535";
   const lightBottomColor = isDark ? "#121212" : "#fff";
   const SelectedIcon = selectedCategory.icon;
+  const colors = {
+      primary: isDark ? "#FFFFFF" : "#000000",
+      secondary: isDark ? "#CCCCCC" : "#8F8F8F",
+      background: isDark ? "#121212" : "#FFFFFF",
+      card: isDark ? "#2C2C2C" : "#F6F6F6",
+  };
 
   return (
     <View style={{ flex: 1, backgroundColor: darkTopBarColor }}>
       <StatusBar style="light" />
+
+      {/* Date Picker Modal */}
+      <Modal
+        visible={showDatePicker}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setShowDatePicker(false)}
+      >
+        <TouchableOpacity
+          style={{
+            flex: 1,
+            backgroundColor: "rgba(0,0,0,0.5)",
+            justifyContent: "center",
+            padding: 24,
+          }}
+          activeOpacity={1}
+          onPress={() => setShowDatePicker(false)}
+        >
+          <View
+            style={{
+              backgroundColor: colors.card,
+              borderRadius: 24,
+              overflow: "hidden",
+            }}
+            onStartShouldSetResponder={() => true}
+            onTouchEnd={(e) => e.stopPropagation()}
+          >
+            <Calendar
+              current={getSafeDate(date).toISOString().split('T')[0]}
+              onDayPress={(day) => {
+                const [year, month, d] = day.dateString.split('-').map(Number);
+                setDate(new Date(year, month - 1, d, 12, 0, 0));
+                setShowDatePicker(false);
+              }}
+              theme={{
+                backgroundColor: colors.card,
+                calendarBackground: colors.card,
+                textSectionTitleColor: colors.secondary,
+                selectedDayBackgroundColor: colors.primary,
+                selectedDayTextColor: colors.background,
+                todayTextColor: colors.primary,
+                dayTextColor: colors.primary,
+                textDisabledColor: colors.secondary,
+                arrowColor: colors.primary,
+                monthTextColor: colors.primary,
+                textDayFontFamily: "InstrumentSans_400Regular",
+                textMonthFontFamily: "InstrumentSans_600SemiBold",
+                textDayHeaderFontFamily: "InstrumentSans_500Medium",
+              }}
+            />
+          </View>
+        </TouchableOpacity>
+      </Modal>
 
       {/* Fixed Header */}
       <View
@@ -329,37 +447,63 @@ export default function AddExpense() {
             }}
           />
 
-          {/* AI Smart Entry Button */}
+          {/* AI Smart Entry Buttons */}
           {aiEnabled && !showSmartEntry && (
-            <TouchableOpacity
-                onPress={() => {
-                    triggerSelection();
-                    setShowSmartEntry(true);
-                }}
-                style={{
-                    alignSelf: "center",
-                    backgroundColor: colors.primary, // Using colors object if available, else literal
-                    backgroundColor: isDark ? "#2A1A40" : "#F0E6FF",
-                    paddingVertical: 8,
-                    paddingHorizontal: 16,
-                    borderRadius: 20,
-                    marginBottom: 20,
-                    flexDirection: "row",
-                    alignItems: "center",
-                    gap: 8,
-                    borderWidth: 1,
-                    borderColor: isDark ? "#A78BFA" : "#7C3AED"
-                }}
-            >
-                <Sparkles size={16} color={isDark ? "#A78BFA" : "#7C3AED"} />
-                <Text style={{ 
-                    fontFamily: "InstrumentSans_600SemiBold", 
-                    color: isDark ? "#A78BFA" : "#7C3AED",
-                    fontSize: 14
-                }}>
-                    Smart Entry
-                </Text>
-            </TouchableOpacity>
+            <View style={{ flexDirection: 'row', gap: 12, justifyContent: 'center', marginBottom: 20 }}>
+                {/* Text Entry Button */}
+                <TouchableOpacity
+                    onPress={() => {
+                        triggerSelection();
+                        setShowSmartEntry(true);
+                    }}
+                    style={{
+                        backgroundColor: isDark ? "#2A1A40" : "#F0E6FF",
+                        paddingVertical: 8,
+                        paddingHorizontal: 16,
+                        borderRadius: 20,
+                        flexDirection: "row",
+                        alignItems: "center",
+                        gap: 8,
+                        borderWidth: 1,
+                        borderColor: isDark ? "#A78BFA" : "#7C3AED"
+                    }}
+                >
+                    <Sparkles size={16} color={isDark ? "#A78BFA" : "#7C3AED"} />
+                    <Text style={{ 
+                        fontFamily: "InstrumentSans_600SemiBold", 
+                        color: isDark ? "#A78BFA" : "#7C3AED",
+                        fontSize: 14
+                    }}>
+                        Smart Entry
+                    </Text>
+                </TouchableOpacity>
+
+                {/* Scan Receipt Button */}
+                <TouchableOpacity
+                    onPress={pickImage}
+                    disabled={isProcessingAI}
+                    style={{
+                        backgroundColor: isDark ? "#2A1A40" : "#F0E6FF",
+                        paddingVertical: 8,
+                        paddingHorizontal: 16,
+                        borderRadius: 20,
+                        flexDirection: "row",
+                        alignItems: "center",
+                        gap: 8,
+                        borderWidth: 1,
+                        borderColor: isDark ? "#A78BFA" : "#7C3AED",
+                        opacity: isProcessingAI ? 0.5 : 1
+                    }}
+                >
+                    <Text style={{ 
+                        fontFamily: "InstrumentSans_600SemiBold", 
+                        color: isDark ? "#A78BFA" : "#7C3AED",
+                        fontSize: 14
+                    }}>
+                        {isProcessingAI ? "Scanning..." : "Scan Receipt"}
+                    </Text>
+                </TouchableOpacity>
+            </View>
           )}
 
           {/* Smart Entry Input Area */}
@@ -548,34 +692,58 @@ export default function AddExpense() {
             Expenses
           </Text>
 
-          {/* Amount Input */}
+          {/* Amount Display */}
           <View
             style={{
-              flexDirection: "row",
+              flexDirection: "column",
               alignItems: "center",
               justifyContent: "center",
               marginBottom: 24,
             }}
           >
-            <Text
-              style={{
-                fontFamily: "InstrumentSans_600SemiBold",
-                fontSize: 36,
-                color: isDark ? "#888888" : "#B0B0B0",
-              }}
+            <View style={{flexDirection: 'row', alignItems: 'center'}}>
+                <Text
+                  style={{
+                    fontFamily: "InstrumentSans_600SemiBold",
+                    fontSize: 36,
+                    color: isDark ? "#888888" : "#B0B0B0",
+                  }}
+                >
+                  ₦
+                </Text>
+                <Text
+                  style={{
+                    fontFamily: "InstrumentSans_600SemiBold",
+                    fontSize: 64,
+                    color: isDark ? "#FFFFFF" : "#000",
+                    letterSpacing: -2,
+                  }}
+                >
+                  {amount}
+                </Text>
+            </View>
+            
+            {/* Date Display */}
+            <TouchableOpacity 
+                 onPress={() => setShowDatePicker(true)}
+                 style={{
+                   marginTop: 8,
+                   paddingHorizontal: 12,
+                   paddingVertical: 6,
+                   backgroundColor: colors.card,
+                   borderRadius: 20,
+                 }}
             >
-              ₦
-            </Text>
-            <Text
-              style={{
-                fontFamily: "InstrumentSans_600SemiBold",
-                fontSize: 64,
-                color: isDark ? "#FFFFFF" : "#000",
-                letterSpacing: -2,
-              }}
-            >
-              {amount}
-            </Text>
+                <Text
+                  style={{
+                    fontFamily: "InstrumentSans_500Medium",
+                    fontSize: 14,
+                    color: colors.primary,
+                  }}
+                >
+                  {format(getSafeDate(date), "d MMMM yyyy")}
+                </Text>
+            </TouchableOpacity>
           </View>
 
           {/* Note Field */}
@@ -596,7 +764,7 @@ export default function AddExpense() {
           />
 
           {/* Custom Keypad */}
-          <CustomKeypad onKeyPress={handleKeyPress} />
+          <CustomKeypad onKeyPress={handleKeyPress} isDark={isDark} />
         </View>
       </ScrollView>
     </View>

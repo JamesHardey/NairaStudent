@@ -1,6 +1,7 @@
 import { getAISettings, getCategories } from "./storage";
 
-const GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent";
+const GEMINI_MODEL = "gemini-2.5-flash";
+const GEMINI_API_URL = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`;
 
 const buildPrompt = (expenseText, categories) => {
   const categoryList = categories.map(c => c.name).join(", ");
@@ -133,3 +134,61 @@ export const processReceiptImage = async (base64Image) => {
       return null;
     }
   };
+
+  const buildAdvicePrompt = (expenses, dailyLimit, categories) => {
+    // Simplify data to save tokens
+    const recentExpenses = expenses.slice(0, 20).map(e => {
+        const cat = categories.find(c => c.id === e.category)?.name || "Unknown";
+        return `${e.amount} (${cat}) on ${new Date(e.date).toDateString()}: ${e.note}`;
+    }).join("\n");
+
+    return `
+      You are a wise and friendly financial advisor for a Nigerian student.
+      Daily Limit: ₦${dailyLimit}
+      Recent Expenses:
+      ${recentExpenses}
+
+      Based on this data, provide 3 short, actionable, and encouraging pieces of advice to help me manage my money better. 
+      Focus on patterns like spending too much on food or transport if visible.
+      Keep it brief, friendly, and use Nigerian relatable context if appropriate (but keep English).
+      Return ONLY a JSON object with a key "advice" which is an ARRAY of strings.
+      Example: {"advice": ["You spend a lot on food, try cooking more.", "Good job staying within budget yesterday!"]}
+    `;
+};
+
+export const getSpendingAdvice = async (expenses, dailyLimit) => {
+    try {
+        const settings = await getAISettings();
+        if (!settings.enabled || !settings.apiKey) {
+            throw new Error("AI not enabled");
+        }
+
+        const categories = await getCategories();
+        const prompt = buildAdvicePrompt(expenses, dailyLimit, categories);
+
+        const response = await fetch(`${GEMINI_API_URL}?key=${settings.apiKey}`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                contents: [{ parts: [{ text: prompt }] }]
+            })
+        });
+
+        const data = await response.json();
+
+        if (!data.candidates || !data.candidates[0]?.content) {
+            console.error("Gemini Advice Error:", data);
+            return null;
+        }
+
+        const resultText = data.candidates[0].content.parts[0].text;
+        const cleanJson = resultText.replace(/```json/g, "").replace(/```/g, "").trim();
+        const result = JSON.parse(cleanJson);
+        
+        return result.advice || ["Keep tracking your expenses to see better insights!"];
+
+    } catch (error) {
+        console.error("AI Advice Error:", error);
+        return null; // Return null to handle UI gracefully
+    }
+};

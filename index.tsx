@@ -1,30 +1,19 @@
-import ExceptionsManager from 'react-native/Libraries/Core/ExceptionsManager';
+// ExceptionsManager removed as it used deprecated deep imports
 
-if (__DEV__) {
-  ExceptionsManager.handleException = (error, isFatal) => {
-    // no-op
-  };
-}
+import "react-native-url-polyfill/auto";
+import "./src/__create/polyfills";
+global.Buffer = require("buffer").Buffer;
 
-import 'react-native-url-polyfill/auto';
-import './src/__create/polyfills';
-global.Buffer = require('buffer').Buffer;
-
-import 'expo-router/entry';
-import { App } from 'expo-router/build/qualified-entry';
-import type { ReactNode } from 'react';
-import { AppRegistry, LogBox } from 'react-native';
-import { DeviceErrorBoundaryWrapper } from './__create/DeviceErrorBoundary';
-import AnythingMenu from './src/__create/anything-menu';
-
+import "expo-router/entry";
+import { App } from "expo-router/build/qualified-entry";
+import type { ReactNode } from "react";
+import { AppRegistry, LogBox } from "react-native";
+import { DeviceErrorBoundaryWrapper } from "./__create/DeviceErrorBoundary";
+import AnythingMenu from "./src/__create/anything-menu";
 
 function AnythingMenuWrapper({ children }: { children: ReactNode }) {
-  return (
-    <AnythingMenu>
-      {children}
-    </AnythingMenu>
-  );
-};
+  return <AnythingMenu>{children}</AnythingMenu>;
+}
 
 let WrapperComponentProvider = AnythingMenuWrapper;
 
@@ -40,4 +29,4 @@ if (__DEV__) {
   };
 }
 AppRegistry.setWrapperComponentProvider(() => WrapperComponentProvider);
-AppRegistry.registerComponent('main', () => App);
+AppRegistry.registerComponent("main", () => App);

@@ -7,6 +7,7 @@ import {
   ScrollView,
   useColorScheme,
   Alert,
+  Modal,
 } from "react-native";
 import { StatusBar } from "expo-status-bar";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -22,6 +23,9 @@ import { updateExpense, getDailyLimit, getExpenses, getCategories } from "../uti
 import { DEFAULT_CATEGORIES } from "../constants/categories";
 import { formatNaira, calculateRemainingBalance } from "../utils/calculations";
 import CustomKeypad from "../components/CustomKeypad";
+import { Calendar } from "react-native-calendars";
+
+import { format } from "date-fns";
 
 export default function EditExpense() {
   const insets = useSafeAreaInsets();
@@ -36,6 +40,16 @@ export default function EditExpense() {
   const [selectedCategory, setSelectedCategory] = useState(DEFAULT_CATEGORIES[0]);
   const [showCategoryPicker, setShowCategoryPicker] = useState(false);
   const [remainingBalance, setRemainingBalance] = useState(0);
+  
+  // New state for date
+  const [date, setDate] = useState(new Date());
+  const [showDatePicker, setShowDatePicker] = useState(false);
+
+  // Helper for safe date
+  const getSafeDate = (d) => {
+    if (d instanceof Date && !isNaN(d)) return d;
+    return new Date();
+  };
 
   const [fontsLoaded] = useFonts({
     InstrumentSans_400Regular,
@@ -64,6 +78,10 @@ export default function EditExpense() {
         setNote(expense.note || "");
         const category = cats.find((cat) => cat.id === expense.category);
         if (category) setSelectedCategory(category);
+        if (expense.date) {
+            const parsed = new Date(expense.date);
+            if (!isNaN(parsed)) setDate(parsed);
+        }
       }
     }
   };
@@ -96,6 +114,7 @@ export default function EditExpense() {
         amount: parseFloat(amount),
         category: selectedCategory.id,
         note: note.trim(),
+        date: getSafeDate(date).toISOString(),
       });
 
       if (success) {
@@ -104,9 +123,11 @@ export default function EditExpense() {
         Alert.alert("Error", "Failed to update expense");
       }
     } else if (key === "calendar") {
-      console.log("Calendar pressed");
+      setShowDatePicker(true);
     } else if (key === "₦") {
-      console.log("Currency pressed");
+      if (amount !== "0") {
+        setAmount(amount + "000");
+      }
     } else {
       if (amount === "0") {
         setAmount(key);
@@ -171,6 +192,61 @@ export default function EditExpense() {
     <View style={{ flex: 1, backgroundColor: colors.background }}>
       <StatusBar style={isDark ? "light" : "dark"} />
 
+      {/* Date Picker Modal */}
+      <Modal
+        visible={showDatePicker}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setShowDatePicker(false)}
+      >
+        <TouchableOpacity
+          style={{
+            flex: 1,
+            backgroundColor: "rgba(0,0,0,0.5)",
+            justifyContent: "center",
+            padding: 24,
+          }}
+          activeOpacity={1}
+          onPress={() => setShowDatePicker(false)}
+        >
+          <View
+            style={{
+              backgroundColor: colors.card,
+              borderRadius: 24,
+              overflow: "hidden",
+            }}
+            onStartShouldSetResponder={() => true}
+            onTouchEnd={(e) => e.stopPropagation()}
+          >
+            <Calendar
+              current={getSafeDate(date).toISOString().split('T')[0]}
+              onDayPress={(day) => {
+                // Use dateString to avoid timezone issues with timestamp
+                const [year, month, d] = day.dateString.split('-').map(Number);
+                // Create date at local noon to ensure correct day
+                setDate(new Date(year, month - 1, d, 12, 0, 0));
+                setShowDatePicker(false);
+              }}
+              theme={{
+                backgroundColor: colors.card,
+                calendarBackground: colors.card,
+                textSectionTitleColor: colors.secondary,
+                selectedDayBackgroundColor: colors.primary,
+                selectedDayTextColor: colors.background,
+                todayTextColor: colors.primary,
+                dayTextColor: colors.primary,
+                textDisabledColor: colors.secondary,
+                arrowColor: colors.primary,
+                monthTextColor: colors.primary,
+                textDayFontFamily: "InstrumentSans_400Regular",
+                textMonthFontFamily: "InstrumentSans_600SemiBold",
+                textDayHeaderFontFamily: "InstrumentSans_500Medium",
+              }}
+            />
+          </View>
+        </TouchableOpacity>
+      </Modal>
+
       {/* Header */}
       <View
         style={{
@@ -224,12 +300,35 @@ export default function EditExpense() {
           >
             {formatNaira(amount)}
           </Text>
+          
+          {/* Date Display */}
+          <TouchableOpacity 
+             onPress={() => setShowDatePicker(true)}
+             style={{
+               marginTop: 8,
+               paddingHorizontal: 12,
+               paddingVertical: 6,
+               backgroundColor: colors.card,
+               borderRadius: 20,
+             }}
+          >
+            <Text
+              style={{
+                fontFamily: "InstrumentSans_500Medium",
+                fontSize: 14,
+                color: colors.primary,
+              }}
+            >
+              {format(getSafeDate(date), "d MMMM yyyy")}
+            </Text>
+          </TouchableOpacity>
+
           <Text
             style={{
               fontFamily: "InstrumentSans_400Regular",
               fontSize: 14,
               color: colors.secondary,
-              marginTop: 8,
+              marginTop: 12,
             }}
           >
             Budget Remaining: {formatNaira(remainingBalance)}

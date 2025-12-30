@@ -9,7 +9,7 @@ import {
 } from "react-native";
 import { StatusBar } from "expo-status-bar";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { Plus, TrendingDown, Wallet } from "lucide-react-native";
+import { Plus, TrendingDown, Wallet, Sparkles } from "lucide-react-native";
 import { useRouter, useFocusEffect } from "expo-router";
 import {
   useFonts,
@@ -27,6 +27,8 @@ import {
 } from "../../utils/calculations";
 import { DEFAULT_CATEGORIES } from "../../constants/categories";
 import { getDailyLimit, getExpenses, getCategories } from "../../utils/storage";
+import { getSpendingAdvice } from "../../utils/ai";
+import { Alert } from "react-native";
 
 export default function Home() {
   const insets = useSafeAreaInsets();
@@ -38,6 +40,8 @@ export default function Home() {
   const [expenses, setExpenses] = useState([]);
   const [categories, setCategories] = useState(DEFAULT_CATEGORIES);
   const [refreshing, setRefreshing] = useState(false);
+  const [advice, setAdvice] = useState([]);
+  const [loadingAdvice, setLoadingAdvice] = useState(false);
 
   const [fontsLoaded] = useFonts({
     Poppins_600SemiBold,
@@ -64,6 +68,18 @@ export default function Home() {
     setRefreshing(true);
     await loadData();
     setRefreshing(false);
+  };
+
+  const handleGetAdvice = async () => {
+    setLoadingAdvice(true);
+    const result = await getSpendingAdvice(expenses, dailyLimit);
+    setLoadingAdvice(false);
+    
+    if (result) {
+        setAdvice(result);
+    } else {
+        Alert.alert("Advisor", "Could not generate advice at this moment. Please check if AI is enabled in settings.");
+    }
   };
 
   if (!fontsLoaded) {
@@ -249,6 +265,62 @@ export default function Home() {
               </Text>
             </View>
           </View>
+        </View>
+
+        {/* Smart Insights Section */}
+        <View style={{ marginBottom: 24 }}>
+             <Text
+              style={{
+                fontFamily: "Poppins_600SemiBold",
+                fontSize: 20,
+                color: colors.primary,
+                marginBottom: 12,
+              }}
+            >
+              Smart Insights
+            </Text>
+            
+            {loadingAdvice ? (
+                <View style={{ padding: 20, backgroundColor: colors.card, borderRadius: 16, alignItems: 'center' }}>
+                     <Text style={{ fontFamily: "Roboto_400Regular", color: colors.secondary }}>analyzing... 🧠</Text>
+                </View>
+            ) : advice.length > 0 ? (
+                <View style={{ backgroundColor: isDark ? "#2A1A40" : "#F0E6FF", borderRadius: 16, padding: 16, borderWidth: 1, borderColor: isDark ? "#A78BFA" : "#7C3AED" }}>
+                     <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 12 }}>
+                        <Sparkles size={20} color={isDark ? "#A78BFA" : "#7C3AED"} style={{ marginRight: 8 }} />
+                        <Text style={{ fontFamily: "Poppins_600SemiBold", fontSize: 16, color: isDark ? "#A78BFA" : "#7C3AED" }}>AI Advisor</Text>
+                     </View>
+                     {advice.map((tip, index) => (
+                         <View key={index} style={{ flexDirection: 'row', marginBottom: 8, alignItems: 'flex-start' }}>
+                             <Text style={{ color: isDark ? "#A78BFA" : "#7C3AED", marginRight: 8, fontSize: 16 }}>•</Text>
+                             <Text style={{ fontFamily: "Roboto_400Regular", color: colors.primary, flex: 1, fontSize: 14, lineHeight: 20 }}>{tip}</Text>
+                         </View>
+                     ))}
+                     <TouchableOpacity onPress={() => setAdvice([])} style={{ alignSelf: 'flex-end', marginTop: 8 }}>
+                         <Text style={{ fontSize: 12, color: colors.secondary, fontFamily: "Poppins_500Medium" }}>Close</Text>
+                     </TouchableOpacity>
+                </View>
+            ) : (
+                <TouchableOpacity
+                    onPress={handleGetAdvice}
+                    style={{
+                        backgroundColor: colors.card,
+                        padding: 16,
+                        borderRadius: 16,
+                        flexDirection: 'row',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        borderWidth: 1,
+                        borderColor: isDark ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.05)",
+                        borderStyle: 'dashed'
+                    }}
+                >
+                    <Sparkles size={20} color={colors.secondary} style={{ marginRight: 10 }} />
+                    <Text style={{ fontFamily: "Poppins_500Medium", color: colors.secondary }}>
+                        Get Advice based on history
+                    </Text>
+                </TouchableOpacity>
+            )}
         </View>
 
         {/* Quick Stats */}

@@ -1,10 +1,11 @@
-
 import { useAuth } from '@/utils/auth/useAuth';
 import { Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import SplashAnimation from '../components/SplashAnimation';
+
 SplashScreen.preventAutoHideAsync();
 
 const queryClient = new QueryClient({
@@ -20,6 +21,7 @@ const queryClient = new QueryClient({
 
 export default function RootLayout() {
   const { initiate, isReady } = useAuth();
+  const [splashAnimationFinished, setSplashAnimationFinished] = useState(false);
 
   useEffect(() => {
     initiate();
@@ -41,6 +43,9 @@ export default function RootLayout() {
         <Stack screenOptions={{ headerShown: false }} initialRouteName="index">
           <Stack.Screen name="index" />
         </Stack>
+        {!splashAnimationFinished && (
+          <SplashAnimation onFinish={() => setSplashAnimationFinished(true)} />
+        )}
       </GestureHandlerRootView>
     </QueryClientProvider>
   );

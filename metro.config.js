@@ -39,12 +39,7 @@ const WEB_ALIASES = {
     './polyfills/web/scrollview.web.jsx'
   ),
 };
-const NATIVE_ALIASES = {
-  './Libraries/Components/TextInput/TextInput': path.resolve(
-    __dirname,
-    './polyfills/native/texinput.native.jsx'
-  ),
-};
+const NATIVE_ALIASES = {};
 const SHARED_ALIASES = {
   'expo-image': path.resolve(__dirname, './polyfills/shared/expo-image.tsx'),
 };

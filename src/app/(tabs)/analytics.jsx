@@ -1,23 +1,26 @@
-import React, { useState, useCallback } from "react";
+import React, { useState, useCallback, useMemo } from "react";
 import {
   View,
   Text,
   ScrollView,
+  TouchableOpacity,
   useColorScheme,
   Dimensions,
   RefreshControl,
 } from "react-native";
 import { StatusBar } from "expo-status-bar";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { PieChart } from "lucide-react-native";
+import { PieChart, Calendar, TrendingUp } from "lucide-react-native";
 import { useFocusEffect } from "expo-router";
 import { useFonts, Poppins_600SemiBold } from "@expo-google-fonts/poppins";
 import { Roboto_400Regular } from "@expo-google-fonts/roboto";
-// import { getExpenses } from "../../utils/storage";
 import {
   formatNaira,
   calculateCategoryBreakdown,
   calculateDailyTotal,
+  isThisWeek,
+  isThisMonth,
+  isThisYear
 } from "../../utils/calculations";
 import { DEFAULT_CATEGORIES } from "../../constants/categories";
 import { getExpenses, getCategories } from "../../utils/storage";
@@ -32,6 +35,7 @@ export default function Analytics() {
   const [expenses, setExpenses] = useState([]);
   const [categories, setCategories] = useState(DEFAULT_CATEGORIES);
   const [refreshing, setRefreshing] = useState(false);
+  const [selectedPeriod, setSelectedPeriod] = useState("week"); // Default to week to show something initially, or month
 
   const [fontsLoaded] = useFonts({
     Poppins_600SemiBold,
@@ -57,32 +61,70 @@ export default function Analytics() {
     setRefreshing(false);
   };
 
+  const filteredExpenses = useMemo(() => {
+    let filtered = [];
+    switch (selectedPeriod) {
+      case "week":
+        filtered = expenses.filter(exp => isThisWeek(exp.date));
+        break;
+      case "month":
+        filtered = expenses.filter(exp => isThisMonth(exp.date));
+        break;
+      case "year":
+        filtered = expenses.filter(exp => isThisYear(exp.date));
+        break;
+      default:
+        filtered = expenses;
+    }
+    console.log(`Analytics Filter Debug: Period=${selectedPeriod}, TotalExpenses=${expenses.length}, Filtered=${filtered.length}`);
+    return filtered;
+  }, [expenses, selectedPeriod]);
+
+  const categoryBreakdown = useMemo(() => {
+     const breakdown = filteredExpenses.reduce((acc, exp) => {
+      const category = exp.category;
+      if (!acc[category]) {
+        acc[category] = 0;
+      }
+      acc[category] += parseFloat(exp.amount);
+      return acc;
+    }, {});
+
+    const total = filteredExpenses.reduce((sum, exp) => sum + parseFloat(exp.amount), 0);
+
+    return Object.entries(breakdown).map(([category, amount]) => ({
+      category,
+      amount,
+      percentage: total > 0 ? (amount / total) * 100 : 0,
+    })).sort((a, b) => b.amount - a.amount);
+  }, [filteredExpenses]);
+
+  const totalSpent = filteredExpenses.reduce((sum, exp) => sum + parseFloat(exp.amount), 0);
+
   if (!fontsLoaded) {
     return null;
   }
-
-  const categoryBreakdown = calculateCategoryBreakdown(expenses);
-  const dailyTotal = calculateDailyTotal(expenses);
 
   const colors = {
     primary: isDark ? "#FFFFFF" : "#000000",
     secondary: isDark ? "#CCCCCC" : "#8F8F8F",
     background: isDark ? "#121212" : "#FFFFFF",
     card: isDark ? "#2C2C2C" : "#F6F6F6",
+    accent: isDark ? "#4A90E2" : "#2563EB",
   };
 
-  // Simple pie chart visualization with list
   const PieChartDisplay = () => {
     if (categoryBreakdown.length === 0) {
       return (
         <View
           style={{
-            width: screenWidth - 48,
+            width: "100%",
             height: 200,
             borderRadius: 16,
             backgroundColor: colors.card,
             alignItems: "center",
             justifyContent: "center",
+            marginBottom: 24,
           }}
         >
           <PieChart size={48} color={colors.secondary} />
@@ -94,36 +136,45 @@ export default function Analytics() {
               marginTop: 16,
             }}
           >
-            No data yet
+            No data for this {selectedPeriod}
           </Text>
         </View>
       );
     }
 
     return (
-      <View style={{ marginBottom: 32 }}>
-        <Text
-          style={{
-            fontFamily: "Poppins_600SemiBold",
-            fontSize: 28,
-            color: colors.primary,
-            textAlign: "center",
-            marginBottom: 8,
-          }}
-        >
-          {formatNaira(dailyTotal)}
-        </Text>
-        <Text
-          style={{
-            fontFamily: "Roboto_400Regular",
-            fontSize: 14,
-            color: colors.secondary,
-            textAlign: "center",
-            marginBottom: 24,
-          }}
-        >
-          Total Spent Today
-        </Text>
+      <View style={{ marginBottom: 32, alignItems: 'center' }}>
+        <View style={{
+            width: 200,
+            height: 200,
+            borderRadius: 100,
+            borderWidth: 20,
+            borderColor: colors.card,
+            alignItems: 'center',
+            justifyContent: 'center',
+            marginBottom: 16
+        }}>
+            <Text
+            style={{
+                fontFamily: "Poppins_600SemiBold",
+                fontSize: 24,
+                color: colors.primary,
+                textAlign: "center",
+            }}
+            >
+            {formatNaira(totalSpent)}
+            </Text>
+             <Text
+            style={{
+                fontFamily: "Roboto_400Regular",
+                fontSize: 12,
+                color: colors.secondary,
+                textAlign: "center",
+            }}
+            >
+            Total {selectedPeriod}
+            </Text>
+        </View>
       </View>
     );
   };
@@ -177,8 +228,46 @@ export default function Analytics() {
               color: colors.secondary,
             }}
           >
-            Today's spending breakdown
+            Spending breakdown
           </Text>
+        </View>
+
+        {/* Period Selector */}
+        <View
+          style={{
+            flexDirection: "row",
+            backgroundColor: colors.card,
+            borderRadius: 12,
+            padding: 4,
+            marginBottom: 24,
+          }}
+        >
+          {['week', 'month', 'year'].map((period) => (
+             <TouchableOpacity
+                key={period}
+                onPress={() => setSelectedPeriod(period)}
+                style={{
+                flex: 1,
+                paddingVertical: 12,
+                borderRadius: 8,
+                backgroundColor:
+                    selectedPeriod === period ? colors.accent : "transparent",
+                }}
+            >
+                <Text
+                style={{
+                    fontFamily: "Poppins_600SemiBold",
+                    fontSize: 14,
+                    color:
+                    selectedPeriod === period ? "#FFFFFF" : colors.secondary,
+                    textAlign: "center",
+                    textTransform: 'capitalize'
+                }}
+                >
+                {period}
+                </Text>
+            </TouchableOpacity>
+          ))}
         </View>
 
         {/* Total Display */}
@@ -194,7 +283,7 @@ export default function Analytics() {
               marginBottom: 16,
             }}
           >
-            Breakdown by Category
+            Top Categories
           </Text>
 
           {categoryBreakdown.length === 0 ? (
@@ -214,8 +303,7 @@ export default function Analytics() {
                   textAlign: "center",
                 }}
               >
-                No expenses to show yet.{"\n"}Add an expense to see your
-                breakdown.
+                No expenses to show for this {selectedPeriod}.
               </Text>
             </View>
           ) : (
@@ -260,25 +348,45 @@ export default function Analytics() {
                     >
                       {category.name}
                     </Text>
-                    <Text
-                      style={{
-                        fontFamily: "Roboto_400Regular",
-                        fontSize: 12,
-                        color: colors.secondary,
-                      }}
+                    <View
+                        style={{
+                            height: 4,
+                            backgroundColor: isDark ? "#1A1A1A" : "#E5E7EB",
+                            borderRadius: 2,
+                            overflow: "hidden",
+                            width: '100%'
+                        }}
                     >
-                      {item.percentage.toFixed(1)}% of total
+                        <View
+                            style={{
+                            height: "100%",
+                            width: `${item.percentage}%`,
+                            backgroundColor: colors.accent,
+                            borderRadius: 2,
+                            }}
+                        />
+                    </View>
+                  </View>
+                  <View style={{ alignItems: 'flex-end', marginLeft: 12 }}>
+                    <Text
+                        style={{
+                        fontFamily: "Poppins_600SemiBold",
+                        fontSize: 16,
+                        color: colors.primary,
+                        }}
+                    >
+                        {formatNaira(item.amount)}
+                    </Text>
+                    <Text
+                         style={{
+                            fontFamily: "Roboto_400Regular",
+                            fontSize: 12,
+                            color: colors.secondary,
+                            }}
+                    >
+                        {item.percentage.toFixed(1)}%
                     </Text>
                   </View>
-                  <Text
-                    style={{
-                      fontFamily: "Poppins_600SemiBold",
-                      fontSize: 18,
-                      color: colors.primary,
-                    }}
-                  >
-                    {formatNaira(item.amount)}
-                  </Text>
                 </View>
               );
             })

@@ -109,6 +109,13 @@ export const isThisMonth = (dateString) => {
   );
 };
 
+// Check if a date is within the current year
+export const isThisYear = (dateString) => {
+  const date = new Date(dateString);
+  const today = new Date();
+  return date.getFullYear() === today.getFullYear();
+};
+
 // Calculate total expenses for this week
 export const calculateWeeklyTotal = (expenses) => {
   const weekExpenses = expenses.filter((exp) => isThisWeek(exp.date));
@@ -121,38 +128,22 @@ export const calculateMonthlyTotal = (expenses) => {
   return monthExpenses.reduce((sum, exp) => sum + parseFloat(exp.amount), 0);
 };
 
-// Calculate daily average for the week
+// Calculate daily average for the week (based on days passed this week)
 export const calculateWeeklyAverage = (expenses) => {
-  const weekExpenses = expenses.filter((exp) => isThisWeek(exp.date));
-  if (weekExpenses.length === 0) return 0;
-  
-  // Group expenses by day
-  const dailyTotals = weekExpenses.reduce((acc, exp) => {
-    const day = new Date(exp.date).toISOString().split("T")[0];
-    if (!acc[day]) acc[day] = 0;
-    acc[day] += parseFloat(exp.amount);
-    return acc;
-  }, {});
-  
-  const days = Object.keys(dailyTotals).length;
-  return days > 0 ? calculateWeeklyTotal(expenses) / days : 0;
+  const weekTotal = calculateWeeklyTotal(expenses);
+  const today = new Date();
+  const dayOfWeek = today.getDay(); // 0 (Sun) - 6 (Sat)
+  // Assuming week starts on Sunday. Days passed = dayOfWeek + 1
+  const daysPassed = dayOfWeek + 1;
+  return weekTotal / daysPassed;
 };
 
-// Calculate daily average for the month
+// Calculate daily average for the month (based on days passed this month)
 export const calculateMonthlyAverage = (expenses) => {
-  const monthExpenses = expenses.filter((exp) => isThisMonth(exp.date));
-  if (monthExpenses.length === 0) return 0;
-  
-  // Group expenses by day
-  const dailyTotals = monthExpenses.reduce((acc, exp) => {
-    const day = new Date(exp.date).toISOString().split("T")[0];
-    if (!acc[day]) acc[day] = 0;
-    acc[day] += parseFloat(exp.amount);
-    return acc;
-  }, {});
-  
-  const days = Object.keys(dailyTotals).length;
-  return days > 0 ? calculateMonthlyTotal(expenses) / days : 0;
+  const monthTotal = calculateMonthlyTotal(expenses);
+  const today = new Date();
+  const dayOfMonth = today.getDate(); // 1 - 31
+  return monthTotal / dayOfMonth;
 };
 
 // Get expenses grouped by day for the week
@@ -176,11 +167,47 @@ export const getWeeklyExpensesByDay = (expenses) => {
   }));
 };
 
+// Get expenses grouped by week for the month
+export const getMonthlyExpensesByWeek = (expenses) => {
+  const monthExpenses = expenses.filter((exp) => isThisMonth(exp.date));
+  
+  // Create bucket for weeks (1-5)
+  const weeks = {
+    'Wk 1': 0,
+    'Wk 2': 0,
+    'Wk 3': 0,
+    'Wk 4': 0,
+    'Wk 5': 0
+  };
+
+  monthExpenses.forEach(exp => {
+    const date = new Date(exp.date);
+    const day = date.getDate();
+    // Simple bucket: 1-7, 8-14, 15-21, 22-28, 29+
+    let weekNum = Math.ceil(day / 7);
+    if (weekNum > 5) weekNum = 5; 
+    weeks[`Wk ${weekNum}`] += parseFloat(exp.amount);
+  });
+
+  return Object.entries(weeks).map(([week, amount]) => ({
+    day: week, // Using 'day' key to match the weeklychart expectation of {day: string, amount: number}
+    amount
+  }));
+};
+
 // Get top spending categories for a period
 export const getTopCategories = (expenses, period = 'week') => {
-  const filteredExpenses = period === 'week' 
-    ? expenses.filter(exp => isThisWeek(exp.date))
-    : expenses.filter(exp => isThisMonth(exp.date));
+  let filteredExpenses = [];
+  
+  if (period === 'week') {
+    filteredExpenses = expenses.filter(exp => isThisWeek(exp.date));
+  } else if (period === 'month') {
+    filteredExpenses = expenses.filter(exp => isThisMonth(exp.date));
+  } else if (period === 'year') {
+    filteredExpenses = expenses.filter(exp => isThisYear(exp.date));
+  } else {
+    filteredExpenses = expenses;
+  }
   
   const breakdown = filteredExpenses.reduce((acc, exp) => {
     const category = exp.category;

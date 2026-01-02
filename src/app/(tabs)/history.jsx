@@ -26,6 +26,7 @@ import {
   calculateWeeklyAverage,
   calculateMonthlyAverage,
   getWeeklyExpensesByDay,
+  getMonthlyExpensesByWeek,
   getTopCategories,
   getSpendingTrend,
 } from "../../utils/calculations";
@@ -76,7 +77,10 @@ export default function History() {
   const monthlyTotal = calculateMonthlyTotal(expenses);
   const weeklyAverage = calculateWeeklyAverage(expenses);
   const monthlyAverage = calculateMonthlyAverage(expenses);
+  
   const weeklyByDay = getWeeklyExpensesByDay(expenses);
+  const monthlyByWeek = getMonthlyExpensesByWeek(expenses);
+  
   const topCategories = getTopCategories(expenses, selectedPeriod);
   const spendingTrend = getSpendingTrend(expenses);
 
@@ -87,8 +91,10 @@ export default function History() {
     card: isDark ? "#2C2C2C" : "#F6F6F6",
     accent: isDark ? "#4A90E2" : "#2563EB",
   };
-
-  const maxDayAmount = Math.max(...weeklyByDay.map((d) => d.amount), 1);
+  
+  // Decide which data to show in chart
+  const chartData = selectedPeriod === 'week' ? weeklyByDay : monthlyByWeek;
+  const maxAmount = Math.max(...chartData.map((d) => d.amount), 1);
 
   const TrendIcon =
     spendingTrend.trend === "increasing"
@@ -285,7 +291,9 @@ export default function History() {
           </View>
         </View>
 
-        {/* Spending Trend */}
+        {/* Spending Trend (Only relevant for recent 'today', maybe hide or adjust for month?) 
+            Actually, the trend logic is Today vs Yesterday. It's always relevant as a dashboard widget.
+        */}
         <View
           style={{
             backgroundColor: colors.card,
@@ -333,9 +341,8 @@ export default function History() {
           </View>
         </View>
 
-        {/* Weekly Chart */}
-        {selectedPeriod === "week" && (
-          <View
+        {/* Chart (Week or Month) */}
+        <View
             style={{
               backgroundColor: colors.card,
               borderRadius: 16,
@@ -351,13 +358,13 @@ export default function History() {
                 marginBottom: 20,
               }}
             >
-              This Week's Spending
+              {selectedPeriod === 'week' ? "This Week's Spending" : "This Month's Spending"}
             </Text>
 
             <View style={{ flexDirection: "row", alignItems: "flex-end", gap: 8 }}>
-              {weeklyByDay.map((dayData, index) => {
-                const barHeight = maxDayAmount > 0
-                  ? (dayData.amount / maxDayAmount) * 120
+              {chartData.map((data, index) => {
+                const barHeight = maxAmount > 0
+                  ? (data.amount / maxAmount) * 120
                   : 0;
                 return (
                   <View key={index} style={{ flex: 1, alignItems: "center" }}>
@@ -377,9 +384,9 @@ export default function History() {
                         color: colors.secondary,
                       }}
                     >
-                      {dayData.day}
+                      {data.day}
                     </Text>
-                    {dayData.amount > 0 && (
+                    {data.amount > 0 && (
                       <Text
                         style={{
                           fontFamily: "Roboto_400Regular",
@@ -388,7 +395,7 @@ export default function History() {
                           marginTop: 2,
                         }}
                       >
-                        ₦{(dayData.amount / 1000).toFixed(1)}k
+                        {(data.amount / 1000).toFixed(1)}k
                       </Text>
                     )}
                   </View>
@@ -396,7 +403,6 @@ export default function History() {
               })}
             </View>
           </View>
-        )}
 
         {/* Top Categories */}
         <View style={{ marginBottom: 24 }}>
@@ -430,7 +436,7 @@ export default function History() {
                   textAlign: "center",
                 }}
               >
-                No expenses recorded yet
+                No expenses recorded for this {selectedPeriod}
               </Text>
             </View>
           ) : (

@@ -11,7 +11,7 @@ import {
 } from "react-native";
 import { StatusBar } from "expo-status-bar";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { ArrowLeft, ChevronDown } from "lucide-react-native";
+import { ArrowLeft, ChevronDown, Trash2 } from "lucide-react-native";
 import { useRouter, useLocalSearchParams } from "expo-router";
 import {
   useFonts,
@@ -19,7 +19,7 @@ import {
   InstrumentSans_500Medium,
   InstrumentSans_600SemiBold,
 } from "@expo-google-fonts/instrument-sans";
-import { updateExpense, getDailyLimit, getExpenses, getCategories } from "../utils/storage";
+import { updateExpense, getDailyLimit, getExpenses, getCategories, deleteExpense } from "../utils/storage";
 import { DEFAULT_CATEGORIES } from "../constants/categories";
 import { formatNaira, calculateRemainingBalance } from "../utils/calculations";
 import CustomKeypad from "../components/CustomKeypad";
@@ -96,6 +96,28 @@ export default function EditExpense() {
   if (!fontsLoaded) {
     return null;
   }
+
+  const handleDelete = () => {
+    Alert.alert(
+      "Delete Expense",
+      "Are you sure you want to delete this expense?",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: async () => {
+            const success = await deleteExpense(params.id);
+            if (success) {
+              router.back();
+            } else {
+              Alert.alert("Error", "Failed to delete expense");
+            }
+          },
+        },
+      ]
+    );
+  };
 
   const handleKeyPress = async (key) => {
     if (key === "delete") {
@@ -270,7 +292,9 @@ export default function EditExpense() {
         >
           Edit Expense
         </Text>
-        <View style={{ width: 24 }} />
+        <TouchableOpacity onPress={handleDelete}>
+          <Trash2 size={24} color="#EF4444" />
+        </TouchableOpacity>
       </View>
 
       <ScrollView

@@ -1,4 +1,5 @@
 import React, { useState, useCallback } from "react";
+import Swipeable from 'react-native-gesture-handler/Swipeable';
 import {
   View,
   Text,
@@ -9,7 +10,7 @@ import {
 } from "react-native";
 import { StatusBar } from "expo-status-bar";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { Plus, TrendingDown, Wallet, Sparkles } from "lucide-react-native";
+import { Plus, TrendingDown, Wallet, Sparkles, Trash2 } from "lucide-react-native";
 import { useRouter, useFocusEffect } from "expo-router";
 import {
   useFonts,
@@ -26,7 +27,7 @@ import {
   isToday,
 } from "../../utils/calculations";
 import { DEFAULT_CATEGORIES } from "../../constants/categories";
-import { getDailyLimit, getExpenses, getCategories } from "../../utils/storage";
+import { getDailyLimit, getExpenses, getCategories, deleteExpense } from "../../utils/storage";
 import { getSpendingAdvice } from "../../utils/ai";
 import { Alert } from "react-native";
 
@@ -80,6 +81,32 @@ export default function Home() {
     } else {
         Alert.alert("Advisor", "Could not generate advice at this moment. Please check if AI is enabled in settings.");
     }
+  };
+
+  const handleDeleteExpense = (id) => {
+    Alert.alert(
+      "Delete Expense",
+      "Are you sure you want to delete this expense?",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: async () => {
+            const success = await deleteExpense(id);
+            if (success) {
+              // Optimistically update the UI or reload data
+              const newExpenses = expenses.filter(e => e.id !== id);
+              setExpenses(newExpenses);
+              // Also trigger a full reload to ensure consistency with storage if needed
+              // loadData(); // Optional, but local state update is faster
+            } else {
+              Alert.alert("Error", "Failed to delete expense");
+            }
+          },
+        },
+      ]
+    );
   };
 
   if (!fontsLoaded) {
@@ -432,66 +459,101 @@ export default function Home() {
               const CategoryIcon = category.icon;
               const categoryColor = isDark ? category.darkColor : category.lightColor;
 
-              return (
-                <TouchableOpacity
-                  key={expense.id}
-                  onPress={() => router.push(`/edit-expense?id=${expense.id}`)}
-                  activeOpacity={0.7}
-                  style={{
-                    backgroundColor: colors.card,
-                    borderRadius: 16,
-                    padding: 16,
-                    marginBottom: 12,
-                    flexDirection: "row",
-                    alignItems: "center",
-                  }}
-                >
-                  <View
+              const renderRightActions = (progress, dragX) => {
+                return (
+                  <TouchableOpacity
+                    onPress={() => handleDeleteExpense(expense.id)}
                     style={{
-                      width: 48,
-                      height: 48,
-                      backgroundColor: categoryColor,
-                      borderRadius: 24,
-                      alignItems: "center",
+                      backgroundColor: "#EF4444",
                       justifyContent: "center",
-                      marginRight: 12,
+                      alignItems: "center",
+                      width: 80,
+                      height: "100%",
+                      borderTopRightRadius: 16,
+                      borderBottomRightRadius: 16,
+                      marginBottom: 12, // Match the item margin
                     }}
                   >
-                    <CategoryIcon size={24} color={colors.primary} />
-                  </View>
-                  <View style={{ flex: 1 }}>
+                    <Trash2 size={24} color="#FFFFFF" />
+                  </TouchableOpacity>
+                );
+              };
+
+              return (
+                <Swipeable
+                  key={expense.id}
+                  renderRightActions={renderRightActions}
+                  containerStyle={{
+                    marginBottom: 12,
+                    backgroundColor: "transparent",
+                    borderRadius: 16,
+                    overflow: "hidden" // Ensure border radius is respected during swipe
+                  }}
+                  childrenContainerStyle={{
+                      // We need to ensure the item inside has no margin bottom if we handle it in container
+                      // Actually the marginBottom is on the item usually.
+                      // Let's adjust: move marginBottom to Swipeable containerStye (done above)
+                      // and remove it from the child item.
+                  }}
+                >
+                  <TouchableOpacity
+                    onPress={() => router.push(`/edit-expense?id=${expense.id}`)}
+                    activeOpacity={0.7}
+                    style={{
+                      backgroundColor: colors.card,
+                      padding: 16,
+                      // marginBottom: 12, // Removed, handled by Swipeable container
+                      flexDirection: "row",
+                      alignItems: "center",
+                    }}
+                  >
+                    <View
+                      style={{
+                        width: 48,
+                        height: 48,
+                        backgroundColor: categoryColor,
+                        borderRadius: 24,
+                        alignItems: "center",
+                        justifyContent: "center",
+                        marginRight: 12,
+                      }}
+                    >
+                      <CategoryIcon size={24} color={colors.primary} />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text
+                        style={{
+                          fontFamily: "Poppins_600SemiBold",
+                          fontSize: 16,
+                          color: colors.primary,
+                          marginBottom: 2,
+                        }}
+                      >
+                        {category.name}
+                      </Text>
+                      {expense.note && (
+                        <Text
+                          style={{
+                            fontFamily: "Roboto_400Regular",
+                            fontSize: 12,
+                            color: colors.secondary,
+                          }}
+                        >
+                          {expense.note}
+                        </Text>
+                      )}
+                    </View>
                     <Text
                       style={{
                         fontFamily: "Poppins_600SemiBold",
-                        fontSize: 16,
+                        fontSize: 18,
                         color: colors.primary,
-                        marginBottom: 2,
                       }}
                     >
-                      {category.name}
+                      {formatNaira(expense.amount)}
                     </Text>
-                    {expense.note && (
-                      <Text
-                        style={{
-                          fontFamily: "Roboto_400Regular",
-                          fontSize: 12,
-                          color: colors.secondary,
-                        }}
-                      >
-                        {expense.note}
-                      </Text>
-                    )}
-                  </View>
-                  <Text
-                    style={{
-                      fontFamily: "Poppins_600SemiBold",
-                      fontSize: 18,
-                      color: colors.primary,
-                    }}
-                  >
-                    {formatNaira(expense.amount)}
-                  </Text>
-                </TouchableOpacity>
+                  </TouchableOpacity>
+                </Swipeable>
               );
             })
           )}
